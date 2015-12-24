@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Get the working directory where the files url and names are created to use them in the last paste command
+wd="`pwd`"
+echo $wd
+ 
+# Get the list of all available lectures
+wget --load-cookies $2 -O - https://class.coursera.org/$1/lecture/index | grep download.mp4 | sed 's/.*lecture_id=\([0-9]\+\).*/\1/' > url
+ 
+# Generating lecture names in a file then cleaned (removing unwanted characters and numbering them)
+wget --load-cookies $2 -qO- https://class.coursera.org/$1/lecture/index | sed -n -e 's!.*Video (MP4) for \(.*\)</div>.*!\1!p' | sed 's|[*]||g'  > names
+ 
+# We can add numbering by using this command  | nl -nrz -w2 -s\ -\
+ 
+# Generating Section names (weeks)
+wget --load-cookies $2 -qO- https://class.coursera.org/$1/lecture/index | sed -n -e 's!.*span> &nbsp;\(.*\)</h3>.*!\1!p' > week
+ 
+# Lectures after which we'll create a directory and save the follwing lectures in
+# The process here is complicated what we actually did is reverse the order of lines to be able to use
+# sed to extract the lectures after which a new week starts then clean them and number them
+wget --load-cookies $2 -qO- https://class.coursera.org/$1/lecture/index | tac |  sed -n '/span> &nbsp/,/hidden">Video/p' |  sed -n -e 's!.*Video (MP4) for \(.*\)</div>.*!\1!p' | tac | sed 's|[*]||g' > order
+ 
+ 
+# Now we do the same thing to pdfs
+ 
+wget --load-cookies $2 -O - https://class.coursera.org/$1/lecture/index | grep pdf | sed -n -e 's!.*href=\(.*\)"*!\1!p' | cut -d '"' -f 2 > pdfurl
+ 
+wget --load-cookies $2 -qO- https://class.coursera.org/$1/lecture/index | tac | sed -n '/span> &nbsp/,/pdf/p'|  grep pdf | sed 's/.*\/\(.*\)".*/\1/' | tac | sed 's|[*]||g' > pdforder
+ 
+# Problem in PDF download is what if there is a week that doesnt contains a pdf, then the pdf will be
+# downloaded in it as it is the next one on the pdforder list and the week is the next on the week list
+# Possible Solution is to save the line of each order pdf and then grep between the lines the
+# the first week name between them
+ 
+# Now the final part which is downloading
+ 
+ 
+mkdir $3/"`sed -n '1p' week`"
+cd $3/"`sed -n '1p' week`"
+ 
+while read durl name;
+do wget -c --read-timeout=10 --tries=0 --load-cookies $2 "https://class.coursera.org/$1/lecture/download.mp4?lecture_id=$durl" -O "$name.mp4";
+wget -c --read-timeout=10 --tries=0 --load-cookies $2 "https://class.coursera.org/$1/lecture/subtitles?q=$durl _en&format=srt" -O "$name.srt";
+if grep -q "$(echo $name)" $wd/order; then mkdir $3/"`sed -n  "$(($(grep -n "$(echo $name)" $wd/order | cut -d : -f 1)+1))p" $wd/week`"; cd $3/"`sed -n  "$(($(grep -n "$(echo $name)" $wd/order | cut -d : -f 1)+1))p" $wd/week`"; fi
+done < <(paste $wd/url $wd/names)
+ 
+ 
+#Temporary PDF Download
+cd $3/"`sed -n '1p' week`"
+ 
+while read purl;
+do wget -c --read-timeout=10 --tries=0 --load-cookies $2 $purl;
+if grep -q "$(echo $purl | sed 's/.*\/\(.*\)pdf.*/\1/')" $wd/pdforder; then cd $3/"`sed -n  "$(($(grep -n "$(echo $purl | sed 's/.*\/\(.*\)pdf.*/\1/')" $wd/pdforder | cut -d : -f 1)+1))p" $wd/week`"; fi
+done < <(paste $wd/pdfurl)
+ 
+cd $wd
+rm names order url week pdfurl pdforder
+ 
+ 
+ 
+# ---------------------------
+# ███╗   ███╗███████╗██╗    
+# ████╗ ████║██╔════╝██║    
+# ██╔████╔██║█████╗  ██║    
+# ██║╚██╔╝██║██╔══╝  ██║    
+# ██║ ╚═╝ ██║███████╗███████╗
+# ╚═╝     ╚═╝╚══════╝╚══════╝
+# ---------------------------
